@@ -72,8 +72,7 @@ public class MainActivity extends Activity implements CameraBridgeViewBase.CvCam
     private Interpreter faceNetModelInterpreter;
     private static final float DISTANCE_THRESHOLD = 1.0f; // Điều chỉnh ngưỡng tùy theo trường hợp.
     private boolean isSavingFace = false;
-
-
+    private int cameraid ;
     List<FaceData> faceList = new ArrayList<>();
 
 
@@ -117,7 +116,24 @@ public class MainActivity extends Activity implements CameraBridgeViewBase.CvCam
                 showAddFaceDialog();
             }
         });
-        javaCameraView.setCameraIndex(0);
+        Button switchCameraButton = findViewById(R.id.switchCameraButton);
+        switchCameraButton.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                if(cameraid == 0){
+                    cameraid = 1;
+                    javaCameraView.setCameraIndex(cameraid);
+                    javaCameraView.disableView();
+                    javaCameraView.enableView();
+                } else {
+                    cameraid = 0;
+                    javaCameraView.setCameraIndex(cameraid);
+                    javaCameraView.disableView();
+                    javaCameraView.enableView();
+                }
+            }
+        });
+        javaCameraView.setCameraIndex(cameraid = 0);
 
         if(!OpenCVLoader.initDebug())
         {
