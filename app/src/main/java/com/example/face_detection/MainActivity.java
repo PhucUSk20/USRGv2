@@ -59,7 +59,6 @@ import android.widget.Toast;
 
 public class MainActivity extends Activity implements CameraBridgeViewBase.CvCameraViewListener2 {
 
-    private CameraBridgeViewBase mOpenCvCameraView;
     private static final String TAG="MainActivity";
     JavaCameraView javaCameraView;
     File caseFile;
@@ -72,7 +71,7 @@ public class MainActivity extends Activity implements CameraBridgeViewBase.CvCam
     private Mat lastDetectedFace; // Thêm biến này để lưu trữ khuôn mặt đã phát hiện
     private Interpreter faceNetModelInterpreter;
     private static final float DISTANCE_THRESHOLD = 1.0f; // Điều chỉnh ngưỡng tùy theo trường hợp.
-    private Mat faceToAdd; // Biến để lưu trữ khuôn mặt khi nhấn "Thêm"
+    private boolean isSavingFace = false;
 
 
     List<FaceData> faceList = new ArrayList<>();
@@ -135,28 +134,16 @@ public class MainActivity extends Activity implements CameraBridgeViewBase.CvCam
         if (ContextCompat.checkSelfPermission(this,
                 Manifest.permission.CAMERA)
                 != PackageManager.PERMISSION_GRANTED) {
-
-            // Permission is not granted
-            // Should we show an explanation?
             if (ActivityCompat.shouldShowRequestPermissionRationale(this,
                     Manifest.permission.CAMERA)) {
-                // Show an explanation to the user *asynchronously* -- don't block
-                // this thread waiting for the user's response! After the user
-                // sees the explanation, try again to request the permission.
             } else {
-                // No explanation needed, we can request the permission.
                 ActivityCompat.requestPermissions(this,
                         new String[]{Manifest.permission.CAMERA},
                         PERMISSIONS_READ_CAMERA);
-
-                // MY_PERMISSIONS_REQUEST_READ_CONTACTS is an
-                // app-defined int constant. The callback method gets the
-                // result of the request.
             }
         } else {
             Log.d("LOADED", "PERMISSIOns granted");
             javaCameraView.setCameraPermissionGranted();
-            // Permission has already been granted
         }
 
         javaCameraView.setCvCameraViewListener(this);
@@ -193,6 +180,7 @@ public class MainActivity extends Activity implements CameraBridgeViewBase.CvCam
                 String faceName = faceNameEditText.getText().toString();
                 float[] faceEmbeddings = getFaceEmbeddings(lastDetectedFace);
                 saveFaceInfo(faceName, faceEmbeddings);
+                isSavingFace = false; // Khi nhấn Save, đặt lại trạng thái
                 dialog.dismiss();
             }
         });
@@ -200,12 +188,15 @@ public class MainActivity extends Activity implements CameraBridgeViewBase.CvCam
         dialogBuilder.setNegativeButton("Cancel", new DialogInterface.OnClickListener() {
             @Override
             public void onClick(DialogInterface dialog, int which) {
+                isSavingFace = false; // Khi nhấn Cancel, đặt lại trạng thái
                 dialog.dismiss();
             }
         });
 
         AlertDialog addFaceDialog = dialogBuilder.create();
         addFaceDialog.show();
+        isSavingFace = true; // Khi mở dialog, đặt trạng thái là true
+
     }
 
     private float[] getFaceEmbeddings(Mat faceImage) {
@@ -283,16 +274,16 @@ public class MainActivity extends Activity implements CameraBridgeViewBase.CvCam
             Imgproc.rectangle(mRgba, new Point(rect.x, rect.y),
                     new Point(rect.x + rect.width, rect.y + rect.height),
                     new Scalar(255, 0, 0));
-
-            // Cắt ra hình ảnh khuôn mặt từ mRgba và lưu nó trong lastDetectedFace
-            lastDetectedFace = mRgba.submat(rect);
-            if (lastDetectedFace != null) {
-                float[] faceEmbeddings = getFaceEmbeddings(lastDetectedFace);
-                FaceData nearestFace = findNearestFace(faceEmbeddings);
-                if (nearestFace != null) {
-                    String nearestFaceName = nearestFace.getName();
-                    Imgproc.putText(mRgba, nearestFaceName, new Point(rect.x, rect.y - 10),
-                            Imgproc.FONT_HERSHEY_SIMPLEX, 0.5, new Scalar(255, 0, 0), 2);
+            if (!isSavingFace) {
+                // Cắt ra hình ảnh khuôn mặt từ mRgba và lưu nó trong lastDetectedFace
+                lastDetectedFace = mRgba.submat(rect);
+                if (lastDetectedFace != null) {
+                    float[] faceEmbeddings = getFaceEmbeddings(lastDetectedFace);
+                    FaceData nearestFace = findNearestFace(faceEmbeddings);
+                    if (nearestFace != null) {
+                        String nearestFaceName = nearestFace.getName();
+                        Imgproc.putText(mRgba, nearestFaceName, new Point(rect.x, rect.y - 10),Imgproc.FONT_HERSHEY_SIMPLEX, 0.5, new Scalar(255, 0, 0), 2);
+                    }
                 }
             }
         }
