@@ -113,6 +113,7 @@ public class MainActivity extends Activity implements CameraBridgeViewBase.CvCam
         addFaceButton.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
+                isSavingFace = true;
                 showAddFaceDialog();
             }
         });
@@ -264,17 +265,16 @@ public class MainActivity extends Activity implements CameraBridgeViewBase.CvCam
     // Cắt ra khuôn mặt từ khung hình và lưu nó trong biến lastDetectedFace
     @Override
     public Mat onCameraFrame(CameraBridgeViewBase.CvCameraViewFrame inputFrame) {
+        if (!isSavingFace) {
         mRgba = inputFrame.rgba();
         mGrey = inputFrame.gray();
 
         MatOfRect faceDetections = new MatOfRect();
         faceDetector.detectMultiScale(mRgba, faceDetections);
-
         for (Rect rect : faceDetections.toArray()) {
             Imgproc.rectangle(mRgba, new Point(rect.x, rect.y),
                     new Point(rect.x + rect.width, rect.y + rect.height),
                     new Scalar(255, 0, 0));
-            if (!isSavingFace) {
                 // Cắt ra hình ảnh khuôn mặt từ mRgba và lưu nó trong lastDetectedFace
                 lastDetectedFace = mRgba.submat(rect);
                 if (lastDetectedFace != null) {
