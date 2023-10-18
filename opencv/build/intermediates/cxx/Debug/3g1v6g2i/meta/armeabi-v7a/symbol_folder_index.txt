@@ -1,0 +1,1 @@
+D:\AndroidStudioProjects\HaarCascade\opencv\build\intermediates\cxx\Debug\3g1v6g2i\obj\armeabi-v7a
