@@ -1,5 +1,8 @@
 package com.example.face_detection;
 
+import static org.opencv.core.Core.flip;
+import static org.opencv.imgproc.Imgproc.rectangle;
+
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
@@ -11,6 +14,7 @@ import android.content.Context;
 import android.content.DialogInterface;
 import android.content.pm.PackageManager;
 import android.content.res.AssetFileDescriptor;
+import android.content.res.Configuration;
 import android.graphics.Bitmap;
 import android.os.Bundle;
 import android.util.Log;
@@ -27,6 +31,7 @@ import org.opencv.core.MatOfRect;
 import org.opencv.core.Point;
 import org.opencv.core.Rect;
 import org.opencv.core.Scalar;
+import org.opencv.core.Size;
 import org.opencv.imgproc.Imgproc;
 import org.opencv.objdetect.CascadeClassifier;
 import org.tensorflow.lite.support.common.ops.NormalizeOp;
@@ -74,6 +79,9 @@ public class MainActivity extends Activity implements CameraBridgeViewBase.CvCam
     private boolean isSavingFace = false;
     private int cameraid ;
     List<FaceData> faceList = new ArrayList<>();
+    private Scalar FACE_RECT_COLOR = new Scalar(255, 0, 0); // Đặt màu thành đỏ (BGR)
+    private int mFaceSize = 112; // Đặt kích thước khuôn mặt theo ý muốn
+
 
 
     public class FaceData {
@@ -94,7 +102,6 @@ public class MainActivity extends Activity implements CameraBridgeViewBase.CvCam
         }
     }
 
-
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -103,12 +110,22 @@ public class MainActivity extends Activity implements CameraBridgeViewBase.CvCam
         javaCameraView = (JavaCameraView)findViewById(R.id.javaCamView);
         addFaceButton = findViewById(R.id.addFaceButton);
         faceNameEditText = new EditText(this);
+        Button switchCameraButton = findViewById(R.id.switchCameraButton);
+
+
         // Khởi tạo FaceNet với đường dẫn đến model
         try {
             faceNetModelInterpreter = new Interpreter(loadModelFile("mobile_face_net.tflite"));
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
+
+        int currentOrientation = getResources().getConfiguration().orientation;
+        if (currentOrientation == Configuration.ORIENTATION_LANDSCAPE) {
+        } else {
+            switchCameraButton.setVisibility(View.GONE);
+        }
+
         addFaceButton.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
@@ -116,24 +133,21 @@ public class MainActivity extends Activity implements CameraBridgeViewBase.CvCam
                 showAddFaceDialog();
             }
         });
-        Button switchCameraButton = findViewById(R.id.switchCameraButton);
         switchCameraButton.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
                 if(cameraid == 0){
                     cameraid = 1;
                     javaCameraView.setCameraIndex(cameraid);
-                    javaCameraView.disableView();
-                    javaCameraView.enableView();
                 } else {
                     cameraid = 0;
                     javaCameraView.setCameraIndex(cameraid);
-                    javaCameraView.disableView();
-                    javaCameraView.enableView();
                 }
+                javaCameraView.disableView();
+                javaCameraView.enableView();
             }
         });
-        javaCameraView.setCameraIndex(cameraid = 0);
+        javaCameraView.setCameraIndex(cameraid = 1);
 
         if(!OpenCVLoader.initDebug())
         {
@@ -164,6 +178,30 @@ public class MainActivity extends Activity implements CameraBridgeViewBase.CvCam
         }
 
         javaCameraView.setCvCameraViewListener(this);
+
+
+    }
+    @Override
+    public void onConfigurationChanged(Configuration newConfig) {
+        super.onConfigurationChanged(newConfig);
+        if (newConfig.orientation == Configuration.ORIENTATION_LANDSCAPE) {
+            // Show the "Switch Camera" button in landscape mode
+            Button switchCameraButton = findViewById(R.id.switchCameraButton);
+            switchCameraButton.setVisibility(View.VISIBLE);
+            cameraid = 0;
+            javaCameraView.setCameraIndex(cameraid);
+            javaCameraView.disableView();
+            javaCameraView.enableView();
+        } else {
+            // Hide the "Switch Camera" button in portrait mode
+            Button switchCameraButton = findViewById(R.id.switchCameraButton);
+            switchCameraButton.setVisibility(View.GONE);
+            // Always set the camera to the front camera in portrait mode
+            cameraid = 1;
+            javaCameraView.setCameraIndex(cameraid);
+            javaCameraView.disableView();
+            javaCameraView.enableView();
+        }
     }
 
     private void showAddFaceDialog() {
@@ -278,31 +316,76 @@ public class MainActivity extends Activity implements CameraBridgeViewBase.CvCam
         return fileChannel.map(FileChannel.MapMode.READ_ONLY, startOffset, declaredLength);
     }
 
+
+
     // Cắt ra khuôn mặt từ khung hình và lưu nó trong biến lastDetectedFace
     @Override
     public Mat onCameraFrame(CameraBridgeViewBase.CvCameraViewFrame inputFrame) {
         if (!isSavingFace) {
-        mRgba = inputFrame.rgba();
-        mGrey = inputFrame.gray();
+            int currentOrientation = getResources().getConfiguration().orientation;
+            if (currentOrientation == Configuration.ORIENTATION_LANDSCAPE) {
+                mRgba = inputFrame.rgba();
+                mGrey = inputFrame.gray();
 
-        MatOfRect faceDetections = new MatOfRect();
-        faceDetector.detectMultiScale(mRgba, faceDetections);
-        for (Rect rect : faceDetections.toArray()) {
-            Imgproc.rectangle(mRgba, new Point(rect.x, rect.y),
-                    new Point(rect.x + rect.width, rect.y + rect.height),
-                    new Scalar(255, 0, 0));
-                // Cắt ra hình ảnh khuôn mặt từ mRgba và lưu nó trong lastDetectedFace
-                lastDetectedFace = mRgba.submat(rect);
-                if (lastDetectedFace != null) {
-                    float[] faceEmbeddings = getFaceEmbeddings(lastDetectedFace);
-                    FaceData nearestFace = findNearestFace(faceEmbeddings);
-                    if (nearestFace != null) {
-                        String nearestFaceName = nearestFace.getName();
-                        Imgproc.putText(mRgba, nearestFaceName, new Point(rect.x, rect.y - 10),Imgproc.FONT_HERSHEY_SIMPLEX, 0.5, new Scalar(255, 0, 0), 2);
+           /* MatOfRect faceDetections = new MatOfRect();
+            faceDetector.detectMultiScale(mRgba, faceDetections);
+            for (Rect rect : faceDetections.toArray()) {
+                Imgproc.rectangle(mRgba, new Point(rect.x, rect.y),
+                        new Point(rect.x + rect.width, rect.y + rect.height),
+                        new Scalar(255, 0, 0));*/
+                int height = mGrey.rows();
+                if (Math.round(height * 0.2) > 0) {
+                    mFaceSize = (int) Math.round(height * 0.2);
+                }
+                MatOfRect faceDetections = new MatOfRect();
+                faceDetector.detectMultiScale(mRgba, faceDetections);
+                for (Rect rect : faceDetections.toArray()) {
+                    Imgproc.rectangle(mRgba, new Point(rect.x, rect.y),
+                            new Point(rect.x + rect.width, rect.y + rect.height),
+                            new Scalar(255, 0, 0));
+                    // Cắt ra hình ảnh khuôn mặt từ mRgba và lưu nó trong lastDetectedFace
+                    lastDetectedFace = mRgba.submat(rect);
+                    if (lastDetectedFace != null) {
+                        float[] faceEmbeddings = getFaceEmbeddings(lastDetectedFace);
+                        FaceData nearestFace = findNearestFace(faceEmbeddings);
+                        if (nearestFace != null) {
+                            String nearestFaceName = nearestFace.getName();
+                            Imgproc.putText(mRgba, nearestFaceName, new Point(rect.x, rect.y - 10), Imgproc.FONT_HERSHEY_SIMPLEX, 0.5, new Scalar(255, 0, 0), 2);
+                        }
                     }
                 }
+
+            } else {
+                mRgba = inputFrame.rgba();
+                mGrey = inputFrame.gray();
+
+                Mat rotImage = Imgproc.getRotationMatrix2D(new Point(mRgba.cols() / 2,
+                        mRgba.rows() / 2), 90, 1.0);
+
+                Imgproc.warpAffine(mRgba, mRgba, rotImage, mRgba.size());
+                Imgproc.warpAffine(mGrey, mGrey, rotImage, mRgba.size());
+
+                MatOfRect faceDetections = new MatOfRect();
+                faceDetector.detectMultiScale(mRgba, faceDetections);
+                for (Rect rect : faceDetections.toArray()) {
+                    Imgproc.rectangle(mRgba, new Point(rect.x, rect.y),
+                            new Point(rect.x + rect.width, rect.y + rect.height),
+                            new Scalar(255, 0, 0));
+                    // Cắt ra hình ảnh khuôn mặt từ mRgba và lưu nó trong lastDetectedFace
+                    lastDetectedFace = mRgba.submat(rect);
+                    if (lastDetectedFace != null) {
+                        float[] faceEmbeddings = getFaceEmbeddings(lastDetectedFace);
+                        FaceData nearestFace = findNearestFace(faceEmbeddings);
+                        if (nearestFace != null) {
+                            String nearestFaceName = nearestFace.getName();
+                            Imgproc.putText(mRgba, nearestFaceName, new Point(rect.x, rect.y - 10), Imgproc.FONT_HERSHEY_SIMPLEX, 0.5, new Scalar(255, 0, 0), 2);
+                        }
+                    }
+                }
+
             }
         }
+
         return mRgba;
     }
 
