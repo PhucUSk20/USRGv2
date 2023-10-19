@@ -1,13 +1,11 @@
 package com.example.face_detection;
 
-import static org.opencv.core.Core.flip;
-import static org.opencv.imgproc.Imgproc.rectangle;
-
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
+import com.example.face_detection.SQLConnection;
 
 import android.app.Activity;
 import android.content.Context;
@@ -16,6 +14,7 @@ import android.content.pm.PackageManager;
 import android.content.res.AssetFileDescriptor;
 import android.content.res.Configuration;
 import android.graphics.Bitmap;
+import android.os.AsyncTask;
 import android.os.Bundle;
 import android.util.Log;
 
@@ -25,15 +24,15 @@ import org.opencv.android.JavaCameraView;
 import org.opencv.android.LoaderCallbackInterface;
 import org.opencv.android.OpenCVLoader;
 import org.opencv.android.Utils;
-import org.opencv.core.Core;
 import org.opencv.core.Mat;
 import org.opencv.core.MatOfRect;
 import org.opencv.core.Point;
 import org.opencv.core.Rect;
 import org.opencv.core.Scalar;
-import org.opencv.core.Size;
 import org.opencv.imgproc.Imgproc;
 import org.opencv.objdetect.CascadeClassifier;
+
+
 import org.tensorflow.lite.support.common.ops.NormalizeOp;
 import org.tensorflow.lite.support.image.ImageProcessor;
 import org.tensorflow.lite.support.image.TensorImage;
@@ -41,6 +40,7 @@ import org.tensorflow.lite.support.image.ops.ResizeOp;
 import org.tensorflow.lite.Interpreter;
 
 
+import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
@@ -54,13 +54,16 @@ import java.util.List;
 
 import android.Manifest;
 import android.view.View;
-import android.view.Window;
-import android.view.WindowManager;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.Toast;
+
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
 
 public class MainActivity extends Activity implements CameraBridgeViewBase.CvCameraViewListener2 {
 
@@ -79,14 +82,17 @@ public class MainActivity extends Activity implements CameraBridgeViewBase.CvCam
     private boolean isSavingFace = false;
     private int cameraid ;
     List<FaceData> faceList = new ArrayList<>();
-    private Scalar FACE_RECT_COLOR = new Scalar(255, 0, 0); // Đặt màu thành đỏ (BGR)
     private int mFaceSize = 112; // Đặt kích thước khuôn mặt theo ý muốn
+
+    private Connection sqlConnection;  // Kết nối SQL Server
+    private static MainActivity mainActivity;
 
 
 
     public class FaceData {
         private String name;
         private float[] faceEmbeddings;
+        private Bitmap faceBitmap;
 
         public FaceData(String name, float[] faceEmbeddings) {
             this.name = name;
@@ -112,6 +118,11 @@ public class MainActivity extends Activity implements CameraBridgeViewBase.CvCam
         faceNameEditText = new EditText(this);
         Button switchCameraButton = findViewById(R.id.switchCameraButton);
 
+        sqlConnection = SQLConnection.getConnection();
+        // Load recognised faces from the database
+        loadRecognisedFacesFromDatabase();
+
+        mainActivity = this; // Thêm dòng này
 
         // Khởi tạo FaceNet với đường dẫn đến model
         try {
@@ -236,6 +247,7 @@ public class MainActivity extends Activity implements CameraBridgeViewBase.CvCam
                 float[] faceEmbeddings = getFaceEmbeddings(lastDetectedFace);
                 saveFaceInfo(faceName, faceEmbeddings);
                 isSavingFace = false; // Khi nhấn Save, đặt lại trạng thái
+                savePersonToDatabase(faceName,faceEmbeddings,convertImageToBytes(matToBitmap(lastDetectedFace)));
                 dialog.dismiss();
             }
         });
@@ -350,6 +362,7 @@ public class MainActivity extends Activity implements CameraBridgeViewBase.CvCam
                         FaceData nearestFace = findNearestFace(faceEmbeddings);
                         if (nearestFace != null) {
                             String nearestFaceName = nearestFace.getName();
+                            savePersonToAttendaceList(nearestFaceName);
                             Imgproc.putText(mRgba, nearestFaceName, new Point(rect.x, rect.y - 10), Imgproc.FONT_HERSHEY_SIMPLEX, 0.5, new Scalar(255, 0, 0), 2);
                         }
                     }
@@ -378,6 +391,7 @@ public class MainActivity extends Activity implements CameraBridgeViewBase.CvCam
                         FaceData nearestFace = findNearestFace(faceEmbeddings);
                         if (nearestFace != null) {
                             String nearestFaceName = nearestFace.getName();
+                            savePersonToAttendaceList(nearestFaceName);
                             Imgproc.putText(mRgba, nearestFaceName, new Point(rect.x, rect.y - 10), Imgproc.FONT_HERSHEY_SIMPLEX, 0.5, new Scalar(255, 0, 0), 2);
                         }
                     }
@@ -480,6 +494,115 @@ public class MainActivity extends Activity implements CameraBridgeViewBase.CvCam
             distance += diff * diff;
         }
         return (float) Math.sqrt(distance);
+    }
+
+    // Code interface with SQL Server
+    private void savePersonToDatabase(final String name, final float[] faceVector, final byte[] imageBytes) {
+        AsyncTask<Void, Void, Void> task = new AsyncTask<Void, Void, Void>() {
+            @Override
+            protected Void doInBackground(Void... voids) {
+                if (sqlConnection != null) {
+                    try {
+                        String insertQuery = "INSERT INTO Person (Name, FaceVector, ImageData) VALUES (?, ?, ?)";
+                        PreparedStatement preparedStatement = sqlConnection.prepareStatement(insertQuery);
+                        preparedStatement.setString(1, name);
+                        byte[] faceVectorBytes = convertFloatArrayToBytes(faceVector);
+                        preparedStatement.setBytes(2, faceVectorBytes);
+                        preparedStatement.setBytes(3, imageBytes);
+                        preparedStatement.executeUpdate();
+                    } catch (SQLException e) {
+                        e.printStackTrace();
+                    }
+                }
+                return null;
+            }
+        };
+
+        task.execute();
+    }
+    private void savePersonToAttendaceList(final String name) {
+        AsyncTask<Void, Void, Void> task = new AsyncTask<Void, Void, Void>() {
+            @Override
+            protected Void doInBackground(Void... voids) {
+                if (sqlConnection != null) {
+                    try {
+                        // Trước hết, kiểm tra xem `name` đã tồn tại trong bảng Attendance_List chưa
+                        String checkQuery = "SELECT COUNT(*) FROM Attendance_List WHERE Name = ?";
+                        PreparedStatement checkStatement = sqlConnection.prepareStatement(checkQuery);
+                        checkStatement.setString(1, name);
+                        ResultSet resultSet = checkStatement.executeQuery();
+
+                        resultSet.next();
+                        int count = resultSet.getInt(1);
+
+                        if (count == 0) {
+                            // `name` chưa tồn tại, thực hiện thêm vào bảng
+                            String insertQuery = "INSERT INTO Attendance_List (Name) VALUES (?)";
+                            PreparedStatement preparedStatement = sqlConnection.prepareStatement(insertQuery);
+                            preparedStatement.setString(1, name);
+                            preparedStatement.executeUpdate();
+                        } else {
+                            // `name` đã tồn tại, có thể thực hiện xử lý khác hoặc báo lỗi nếu cần.
+                        }
+
+                        resultSet.close();
+                        checkStatement.close();
+                    } catch (SQLException e) {
+                        e.printStackTrace();
+                    }
+                }
+                return null;
+            }
+        };
+        task.execute();
+    }
+    private byte[] convertImageToBytes(Bitmap image) {
+        ByteArrayOutputStream stream = new ByteArrayOutputStream();
+        image.compress(Bitmap.CompressFormat.PNG, 100, stream);
+        return stream.toByteArray();
+    }
+    private byte[] convertFloatArrayToBytes(float[] floatArray) {
+        ByteBuffer buffer = ByteBuffer.allocate(floatArray.length * 4);
+        for (float value : floatArray) {
+            buffer.putFloat(value);
+        }
+        return buffer.array();
+    }
+    private float[] convertBytesToFloatArray(byte[] bytes) {
+        ByteBuffer buffer = ByteBuffer.wrap(bytes);
+        float[] floatArray = new float[bytes.length / 4];
+        for (int i = 0; i < floatArray.length; i++) {
+            floatArray[i] = buffer.getFloat();
+        }
+        return floatArray;
+    }
+    private void loadRecognisedFacesFromDatabase() {
+        Thread thread = new Thread(new Runnable() {
+            @Override
+            public void run() {
+                if (sqlConnection != null) {
+                    try {
+                        String selectQuery = "SELECT Name, FaceVector FROM Person";
+                        PreparedStatement preparedStatement = sqlConnection.prepareStatement(selectQuery);
+                        ResultSet resultSet = preparedStatement.executeQuery();
+
+                        while (resultSet.next()) {
+                            String name = resultSet.getString("Name");
+                            byte[] faceVectorBytes = resultSet.getBytes("FaceVector");
+                            float[] faceEmbeddings = convertBytesToFloatArray(faceVectorBytes);
+                            faceList.add(new FaceData(name, faceEmbeddings));
+                        }
+
+                        resultSet.close();
+                        preparedStatement.close();
+                    } catch (SQLException e) {
+                        e.printStackTrace();
+                    }
+                }
+            }
+        });
+
+        thread.start();
     }
 
 }
