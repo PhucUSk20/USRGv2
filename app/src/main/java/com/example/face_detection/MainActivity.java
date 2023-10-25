@@ -327,79 +327,43 @@ public class MainActivity extends Activity implements CameraBridgeViewBase.CvCam
         long declaredLength = fileDescriptor.getDeclaredLength();
         return fileChannel.map(FileChannel.MapMode.READ_ONLY, startOffset, declaredLength);
     }
-
-
-
-    // Cắt ra khuôn mặt từ khung hình và lưu nó trong biến lastDetectedFace
+    
     @Override
     public Mat onCameraFrame(CameraBridgeViewBase.CvCameraViewFrame inputFrame) {
+        mRgba = inputFrame.rgba();
+        mGrey = inputFrame.gray();
         if (!isSavingFace) {
             int currentOrientation = getResources().getConfiguration().orientation;
-            if (currentOrientation == Configuration.ORIENTATION_LANDSCAPE) {
-                mRgba = inputFrame.rgba();
-                mGrey = inputFrame.gray();
-
-           /* MatOfRect faceDetections = new MatOfRect();
-            faceDetector.detectMultiScale(mRgba, faceDetections);
-            for (Rect rect : faceDetections.toArray()) {
-                Imgproc.rectangle(mRgba, new Point(rect.x, rect.y),
-                        new Point(rect.x + rect.width, rect.y + rect.height),
-                        new Scalar(255, 0, 0));*/
+            if (currentOrientation == Configuration.ORIENTATION_LANDSCAPE) {;
                 int height = mGrey.rows();
                 if (Math.round(height * 0.2) > 0) {
                     mFaceSize = (int) Math.round(height * 0.2);
                 }
-                MatOfRect faceDetections = new MatOfRect();
-                faceDetector.detectMultiScale(mRgba, faceDetections);
-                for (Rect rect : faceDetections.toArray()) {
-                    Imgproc.rectangle(mRgba, new Point(rect.x, rect.y),
-                            new Point(rect.x + rect.width, rect.y + rect.height),
-                            new Scalar(255, 0, 0));
-                    // Cắt ra hình ảnh khuôn mặt từ mRgba và lưu nó trong lastDetectedFace
-                    lastDetectedFace = mRgba.submat(rect);
-                    if (lastDetectedFace != null) {
-                        float[] faceEmbeddings = getFaceEmbeddings(lastDetectedFace);
-                        FaceData nearestFace = findNearestFace(faceEmbeddings);
-                        if (nearestFace != null) {
-                            String nearestFaceName = nearestFace.getName();
-                            savePersonToAttendaceList(nearestFaceName);
-                            Imgproc.putText(mRgba, nearestFaceName, new Point(rect.x, rect.y - 10), Imgproc.FONT_HERSHEY_SIMPLEX, 0.5, new Scalar(255, 0, 0), 2);
-                        }
-                    }
-                }
-
             } else {
-                mRgba = inputFrame.rgba();
-                mGrey = inputFrame.gray();
-
                 Mat rotImage = Imgproc.getRotationMatrix2D(new Point(mRgba.cols() / 2,
                         mRgba.rows() / 2), 90, 1.0);
-
                 Imgproc.warpAffine(mRgba, mRgba, rotImage, mRgba.size());
                 Imgproc.warpAffine(mGrey, mGrey, rotImage, mRgba.size());
-
-                MatOfRect faceDetections = new MatOfRect();
-                faceDetector.detectMultiScale(mRgba, faceDetections);
-                for (Rect rect : faceDetections.toArray()) {
-                    Imgproc.rectangle(mRgba, new Point(rect.x, rect.y),
-                            new Point(rect.x + rect.width, rect.y + rect.height),
-                            new Scalar(255, 0, 0));
-                    // Cắt ra hình ảnh khuôn mặt từ mRgba và lưu nó trong lastDetectedFace
-                    lastDetectedFace = mRgba.submat(rect);
-                    if (lastDetectedFace != null) {
-                        float[] faceEmbeddings = getFaceEmbeddings(lastDetectedFace);
-                        FaceData nearestFace = findNearestFace(faceEmbeddings);
-                        if (nearestFace != null) {
-                            String nearestFaceName = nearestFace.getName();
-                            savePersonToAttendaceList(nearestFaceName);
-                            Imgproc.putText(mRgba, nearestFaceName, new Point(rect.x, rect.y - 10), Imgproc.FONT_HERSHEY_SIMPLEX, 0.5, new Scalar(255, 0, 0), 2);
-                        }
+            }
+            MatOfRect faceDetections = new MatOfRect();
+            faceDetector.detectMultiScale(mRgba, faceDetections);
+            for (Rect rect : faceDetections.toArray()) {
+                Imgproc.rectangle(mRgba, new Point(rect.x, rect.y),
+                        new Point(rect.x + rect.width, rect.y + rect.height),
+                        new Scalar(255, 0, 0));
+                // Cắt ra hình ảnh khuôn mặt từ mRgba và lưu nó trong lastDetectedFace
+                lastDetectedFace = mRgba.submat(rect);
+                if (lastDetectedFace != null) {
+                    float[] faceEmbeddings = getFaceEmbeddings(lastDetectedFace);
+                    FaceData nearestFace = findNearestFace(faceEmbeddings);
+                    if (nearestFace != null) {
+                        String nearestFaceName = nearestFace.getName();
+                        savePersonToAttendaceList(nearestFaceName);
+                        Imgproc.putText(mRgba, nearestFaceName, new Point(rect.x, rect.y - 10), Imgproc.FONT_HERSHEY_SIMPLEX, 0.5, new Scalar(255, 0, 0), 2);
                     }
                 }
-
             }
         }
-
         return mRgba;
     }
 
