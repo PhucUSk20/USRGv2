@@ -330,9 +330,9 @@ public class MainActivity extends Activity implements CameraBridgeViewBase.CvCam
     
     @Override
     public Mat onCameraFrame(CameraBridgeViewBase.CvCameraViewFrame inputFrame) {
-        mRgba = inputFrame.rgba();
-        mGrey = inputFrame.gray();
         if (!isSavingFace) {
+            mRgba = inputFrame.rgba();
+            mGrey = inputFrame.gray();
             int currentOrientation = getResources().getConfiguration().orientation;
             if (currentOrientation == Configuration.ORIENTATION_LANDSCAPE) {;
                 int height = mGrey.rows();
